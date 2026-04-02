@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using SentinelStream.Models;
 
 namespace SentinelStream.Services;
@@ -11,6 +12,12 @@ namespace SentinelStream.Services;
 /// </summary>
 public class LogStreamClient : IDisposable
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
+    };
+
     private ClientWebSocket? _webSocket;
     private CancellationTokenSource? _cts;
     private bool _disposed;
@@ -84,7 +91,7 @@ public class LogStreamClient : IDisposable
     {
         try
         {
-            var parsed = JsonSerializer.Deserialize<LogEntry>(message);
+            var parsed = JsonSerializer.Deserialize<LogEntry>(message, JsonOptions);
             if (parsed != null) return parsed;
         }
         catch

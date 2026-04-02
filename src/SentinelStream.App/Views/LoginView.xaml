@@ -115,18 +115,14 @@
                            Margin="0,16,0,0"
                            FontFamily="Cascadia Code, Consolas" />
 
-                <!-- Encryption badge -->
-                <StackPanel Orientation="Horizontal"
-                            HorizontalAlignment="Center"
-                            Margin="0,20,0,0">
-                    <TextBlock Text="🔐"
-                               FontSize="12"
-                               Margin="0,0,6,0" />
-                    <TextBlock Text="AES-256-GCM End-to-End Encrypted"
-                               FontSize="11"
-                               Foreground="#6b7280"
-                               FontFamily="Segoe UI" />
-                </StackPanel>
+                <TextBlock Text="Prototype: voice/video and E2EE require Agora SDK integration. Live logs: set LOG_SERVER_URL in .env and run the Python agent."
+                           FontSize="10"
+                           Foreground="#6b7280"
+                           FontFamily="Segoe UI"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           Margin="0,20,0,0"
+                           MaxWidth="380" />
             </StackPanel>
         </Border>
     </Grid>

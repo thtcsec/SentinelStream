@@ -24,24 +24,17 @@ public partial class MainWindow : Window
         {
             try
             {
-                // Load config (use demo AppId if .env not configured)
-                string appId = DefaultAppId;
-                try
+                var config = Services.ConfigLoader.LoadFromEnvFileOrDefault();
+
+                var appId = DefaultAppId;
+                if (!string.IsNullOrWhiteSpace(config.AgoraAppId) &&
+                    !string.Equals(config.AgoraAppId, "your_agora_app_id_here", StringComparison.Ordinal))
                 {
-                    var config = Services.ConfigLoader.LoadFromEnvFile();
-                    if (!string.IsNullOrWhiteSpace(config.AgoraAppId) &&
-                        config.AgoraAppId != "your_agora_app_id_here")
-                    {
-                        appId = config.AgoraAppId;
-                    }
-                }
-                catch
-                {
-                    // Use default if .env not available
+                    appId = config.AgoraAppId;
                 }
 
                 var agoraClient = new AgoraWarRoomClient(appId);
-                var warRoomVm = new WarRoomViewModel(agoraClient);
+                var warRoomVm = new WarRoomViewModel(agoraClient, config.ToFeedOptions());
 
                 warRoomVm.LeaveRequested += (_, _) =>
                 {
@@ -56,6 +49,7 @@ public partial class MainWindow : Window
                 MainContent.Content = warRoomView;
 
                 await warRoomVm.JoinAsync(args.WarRoomId, args.DisplayName);
+                loginVm.IsConnecting = false;
             }
             catch (Exception ex)
             {

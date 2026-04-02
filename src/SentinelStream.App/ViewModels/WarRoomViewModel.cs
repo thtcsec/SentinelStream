@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Input;
 using SentinelStream.Core.Agora;
 using SentinelStream.Models;
+using SentinelStream.Services;
 
 namespace SentinelStream.App.ViewModels;
 
@@ -11,10 +12,15 @@ namespace SentinelStream.App.ViewModels;
 public class WarRoomViewModel : ViewModelBase, IDisposable
 {
     private readonly AgoraWarRoomClient _agoraClient;
+    private readonly WarRoomFeedOptions _feedOptions;
+    private LogStreamClient? _logStreamClient;
     private string _connectionStatus = "Disconnected";
     private string _channelName = string.Empty;
     private string _chatInput = string.Empty;
     private string _displayName = string.Empty;
+    private string _logFeedSummary = "Log agent: not configured (set LOG_SERVER_URL in .env).";
+    private string _sessionModeFootnote =
+        "RTC channel is a local stub until Agora SDK is integrated. Keys in .env are for future use.";
 
     public ObservableCollection<string> LogMessages { get; } = new();
     public ObservableCollection<string> ChatMessages { get; } = new();
@@ -44,14 +50,27 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
         set => SetProperty(ref _displayName, value);
     }
 
+    public string LogFeedSummary
+    {
+        get => _logFeedSummary;
+        set => SetProperty(ref _logFeedSummary, value);
+    }
+
+    public string SessionModeFootnote
+    {
+        get => _sessionModeFootnote;
+        set => SetProperty(ref _sessionModeFootnote, value);
+    }
+
     public ICommand SendChatCommand { get; }
     public ICommand LeaveCommand { get; }
 
     public event EventHandler? LeaveRequested;
 
-    public WarRoomViewModel(AgoraWarRoomClient agoraClient)
+    public WarRoomViewModel(AgoraWarRoomClient agoraClient, WarRoomFeedOptions feedOptions)
     {
         _agoraClient = agoraClient;
+        _feedOptions = feedOptions;
 
         SendChatCommand = new RelayCommand(
             execute: _ => OnSendChat(),
@@ -63,11 +82,20 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
             canExecute: _ => true
         );
 
-        // Subscribe to Agora events
         _agoraClient.StateChanged += OnStateChanged;
         _agoraClient.ParticipantChanged += OnParticipantChanged;
         _agoraClient.LogReceived += OnLogReceived;
         _agoraClient.ChatMessageReceived += OnChatReceived;
+
+        RefreshLogFeedSummaryStaticPart();
+    }
+
+    private void RefreshLogFeedSummaryStaticPart()
+    {
+        if (_feedOptions.LogAgentWebSocketUri == null)
+            LogFeedSummary = "Log agent: not configured (set LOG_SERVER_URL in .env).";
+        else
+            LogFeedSummary = $"Log agent: connecting to {_feedOptions.LogAgentWebSocketUri}…";
     }
 
     public async Task JoinAsync(string channelName, string displayName)
@@ -78,11 +106,70 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
 
         await _agoraClient.JoinWarRoomAsync(channelName, userId, displayName);
 
-        // Start demo log simulation
-        _ = Task.Run(SimulateLogs);
+        if (_feedOptions.LogAgentWebSocketUri != null)
+            StartLogAgentClient(_feedOptions.LogAgentWebSocketUri);
+
+        if (_feedOptions.EnableDemoLogFeed)
+            _ = Task.Run(SimulateLogsAsync);
     }
 
-    private async Task SimulateLogs()
+    private void StartLogAgentClient(Uri uri)
+    {
+        _logStreamClient?.Dispose();
+        _logStreamClient = new LogStreamClient();
+        _logStreamClient.LogReceived += OnAgentLogReceived;
+        _logStreamClient.ConnectionStatusChanged += OnAgentConnectionStatusChanged;
+        _logStreamClient.ErrorOccurred += OnAgentError;
+
+        var url = uri.ToString();
+        LogFeedSummary = $"Log agent: connecting to {uri.Host}:{uri.Port}…";
+        _ = _logStreamClient.ConnectAsync(url);
+    }
+
+    private void OnAgentConnectionStatusChanged(object? sender, string message)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            if (_feedOptions.LogAgentWebSocketUri != null)
+            {
+                var host = _feedOptions.LogAgentWebSocketUri.Host;
+                LogFeedSummary = $"Log agent ({host}): {message}";
+            }
+            else
+                LogFeedSummary = $"Log agent: {message}";
+        });
+    }
+
+    private void OnAgentError(object? sender, Exception ex)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            LogMessages.Add($"[AGENT ERROR] {ex.Message}");
+        });
+    }
+
+    private void OnAgentLogReceived(object? sender, LogEntry entry)
+    {
+        System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+        {
+            AppendLogLine(entry.Timestamp, entry.Severity.ToString(), entry.Message, prefix: "AGENT");
+        });
+    }
+
+    private void AppendLogLine(DateTime timestamp, string severity, string message, string prefix = "LOG")
+    {
+        var severityTag = severity.ToUpperInvariant();
+        LogMessages.Add($"[{timestamp:HH:mm:ss}] [{prefix}] [{severityTag}] {message}");
+        TrimLogBuffer();
+    }
+
+    private void TrimLogBuffer()
+    {
+        while (LogMessages.Count > 200)
+            LogMessages.RemoveAt(0);
+    }
+
+    private async Task SimulateLogsAsync()
     {
         var random = new Random();
         var sampleLogs = new[]
@@ -104,16 +191,11 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
             await Task.Delay(random.Next(1500, 4000));
 
             var (severity, message) = sampleLogs[random.Next(sampleLogs.Length)];
-            var timestamp = DateTime.UtcNow.ToString("HH:mm:ss");
-            var logLine = $"[{timestamp}] [{severity.ToUpper()}] {message}";
+            var timestamp = DateTime.UtcNow;
 
             System.Windows.Application.Current?.Dispatcher.Invoke(() =>
             {
-                LogMessages.Add(logLine);
-
-                // Keep log buffer manageable
-                while (LogMessages.Count > 200)
-                    LogMessages.RemoveAt(0);
+                AppendLogLine(timestamp, severity, message, prefix: "DEMO");
             });
         }
     }
@@ -124,6 +206,7 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
         {
             ConnectionStatus = e.NewState.ToString();
             LogMessages.Add($"[SYSTEM] State: {e.OldState} → {e.NewState} | {e.Message}");
+            TrimLogBuffer();
         });
     }
 
@@ -142,8 +225,7 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
     {
         System.Windows.Application.Current?.Dispatcher.Invoke(() =>
         {
-            var severityTag = e.Log.Severity.ToString().ToUpper();
-            LogMessages.Add($"[{e.Log.Timestamp:HH:mm:ss}] [{severityTag}] {e.Log.Message}");
+            AppendLogLine(e.Log.Timestamp, e.Log.Severity.ToString(), e.Log.Message, prefix: "ROOM");
         });
     }
 
@@ -168,6 +250,24 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
 
     private async void OnLeave()
     {
+        if (_logStreamClient != null)
+        {
+            try
+            {
+                await _logStreamClient.DisconnectAsync();
+            }
+            catch
+            {
+                /* ignore */
+            }
+
+            _logStreamClient.LogReceived -= OnAgentLogReceived;
+            _logStreamClient.ConnectionStatusChanged -= OnAgentConnectionStatusChanged;
+            _logStreamClient.ErrorOccurred -= OnAgentError;
+            _logStreamClient.Dispose();
+            _logStreamClient = null;
+        }
+
         await _agoraClient.LeaveWarRoomAsync();
         LeaveRequested?.Invoke(this, EventArgs.Empty);
     }
@@ -178,6 +278,16 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
         _agoraClient.ParticipantChanged -= OnParticipantChanged;
         _agoraClient.LogReceived -= OnLogReceived;
         _agoraClient.ChatMessageReceived -= OnChatReceived;
+
+        if (_logStreamClient != null)
+        {
+            _logStreamClient.LogReceived -= OnAgentLogReceived;
+            _logStreamClient.ConnectionStatusChanged -= OnAgentConnectionStatusChanged;
+            _logStreamClient.ErrorOccurred -= OnAgentError;
+            _logStreamClient.Dispose();
+            _logStreamClient = null;
+        }
+
         _agoraClient.Dispose();
         GC.SuppressFinalize(this);
     }

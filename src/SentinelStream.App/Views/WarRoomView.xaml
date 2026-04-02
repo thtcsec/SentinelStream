@@ -231,10 +231,14 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Column="0"
-                           Text="🔐 AES-256-GCM • E2E Encrypted • SHA-256 Forensic Integrity Active"
-                           FontSize="11" Foreground="#6b7280" FontFamily="Segoe UI"
-                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding LogFeedSummary}"
+                               FontSize="11" Foreground="#9ca3af" FontFamily="Cascadia Code, Consolas"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding SessionModeFootnote}"
+                               FontSize="10" Foreground="#6b7280" FontFamily="Segoe UI"
+                               Margin="0,4,0,0" TextWrapping="Wrap" />
+                </StackPanel>
 
                 <TextBlock Grid.Column="1"
                            Text="{Binding DisplayName, StringFormat='Operator: {0}'}"
