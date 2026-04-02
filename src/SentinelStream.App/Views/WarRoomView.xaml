@@ -76,6 +76,7 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="36" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
@@ -90,9 +91,18 @@
                         </StackPanel>
                     </Border>
 
+                    <Border Grid.Row="1" Background="#151a28" Padding="8,6" BorderBrush="#1e3a5f" BorderThickness="0,0,0,1">
+                        <TextBox Text="{Binding LogFilterText, UpdateSourceTrigger=PropertyChanged}"
+                                 Background="#1f2937" Foreground="#e5e7eb"
+                                 BorderBrush="#374151" BorderThickness="1"
+                                 Padding="8,5" FontSize="11"
+                                 FontFamily="Cascadia Code, Consolas"
+                                 ToolTip="Filter visible lines (substring, case-insensitive). Export still saves full buffer." />
+                    </Border>
+
                     <!-- Log Messages -->
-                    <ListBox x:Name="LogList" Grid.Row="1"
-                             ItemsSource="{Binding LogMessages}"
+                    <ListBox x:Name="LogList" Grid.Row="2"
+                             ItemsSource="{Binding LogMessagesView}"
                              Background="Transparent"
                              BorderThickness="0"
                              Foreground="#4ade80"

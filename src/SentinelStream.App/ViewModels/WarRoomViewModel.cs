@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Data;
 using System.Windows.Input;
 using SentinelStream.Core.Agora;
 using SentinelStream.Core.Forensics;
@@ -25,8 +27,13 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
     private string _logFeedSummary = "Log agent: not configured (set LOG_SERVER_URL in .env).";
     private string _sessionModeFootnote =
         "RTC channel is a local stub until Agora SDK is integrated. Keys in .env are for future use.";
+    private string _logFilterText = string.Empty;
+    private readonly ListCollectionView _logMessagesView;
 
     public ObservableCollection<string> LogMessages { get; } = new();
+
+    /// <summary>UI binds here; backing store is <see cref="LogMessages"/> (export uses full list).</summary>
+    public ICollectionView LogMessagesView => _logMessagesView;
     public ObservableCollection<string> ChatMessages { get; } = new();
     public ObservableCollection<string> Participants { get; } = new();
 
@@ -66,6 +73,17 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
         set => SetProperty(ref _sessionModeFootnote, value);
     }
 
+    /// <summary>Substring filter applied to displayed log lines (case-insensitive).</summary>
+    public string LogFilterText
+    {
+        get => _logFilterText;
+        set
+        {
+            if (SetProperty(ref _logFilterText, value))
+                _logMessagesView.Refresh();
+        }
+    }
+
     public ICommand SendChatCommand { get; }
     public ICommand LeaveCommand { get; }
 
@@ -79,6 +97,9 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
         _agoraClient = agoraClient;
         _feedOptions = feedOptions;
         _artifactOptions = sessionArtifacts ?? new SessionArtifactOptions();
+
+        _logMessagesView = new ListCollectionView(LogMessages);
+        _logMessagesView.Filter = LogLineFilter;
 
         SendChatCommand = new RelayCommand(
             execute: _ => OnSendChat(),
@@ -96,6 +117,13 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
         _agoraClient.ChatMessageReceived += OnChatReceived;
 
         RefreshLogFeedSummaryStaticPart();
+    }
+
+    private bool LogLineFilter(object obj)
+    {
+        if (obj is not string line) return false;
+        if (string.IsNullOrWhiteSpace(_logFilterText)) return true;
+        return line.Contains(_logFilterText.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     private void RefreshLogFeedSummaryStaticPart()

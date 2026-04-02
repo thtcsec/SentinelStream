@@ -42,6 +42,20 @@ def _env_path(name: str) -> Path | None:
     return Path(raw) if raw else None
 
 
+def _tail_paths_from_env() -> list[Path]:
+    """Comma-separated LOG_TAIL_PATHS wins; else single LOG_TAIL_PATH. Max 32 paths."""
+    raw = os.getenv("LOG_TAIL_PATHS", "").strip()
+    if raw:
+        out: list[Path] = []
+        for part in raw.split(","):
+            p = part.strip()
+            if p:
+                out.append(Path(p))
+        return out[:32]
+    one = _env_path("LOG_TAIL_PATH")
+    return [one] if one else []
+
+
 def _build_log_entry(
     *,
     message: str,
@@ -123,7 +137,7 @@ async def tail_file_task(websocket: WebSocket, file_path: Path) -> None:
 async def mock_interval_task(websocket: WebSocket, interval_sec: float) -> None:
     template = os.getenv(
         "AGENT_MOCK_MESSAGE",
-        "Synthetic heartbeat — configure AGENT_MOCK_MESSAGE or LOG_TAIL_PATH",
+        "Synthetic heartbeat — set LOG_TAIL_PATH(S) or AGENT_MOCK_INTERVAL_SEC",
     )
     source = os.getenv("AGENT_MOCK_SOURCE", "mock")
     while True:
@@ -142,11 +156,11 @@ def read_root():
 
 @app.get("/health")
 def health():
-    tail = _env_path("LOG_TAIL_PATH")
+    paths = _tail_paths_from_env()
     mock_iv = _env_float("AGENT_MOCK_INTERVAL_SEC", 0.0)
     return {
-        "log_tail_path": str(tail) if tail else None,
-        "tail_exists": tail.is_file() if tail else False,
+        "log_tail_paths": [str(p) for p in paths],
+        "log_tail_paths_existing": [str(p) for p in paths if p.is_file()],
         "mock_interval_sec": mock_iv,
     }
 
@@ -156,13 +170,13 @@ async def websocket_logs(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connected.")
 
-    tail_path = _env_path("LOG_TAIL_PATH")
+    tail_paths = _tail_paths_from_env()
     mock_interval = _env_float("AGENT_MOCK_INTERVAL_SEC", 0.0)
 
     tasks: list[asyncio.Task] = []
     try:
-        if tail_path is not None:
-            tasks.append(asyncio.create_task(tail_file_task(websocket, tail_path)))
+        for path in tail_paths:
+            tasks.append(asyncio.create_task(tail_file_task(websocket, path)))
 
         if mock_interval > 0:
             tasks.append(
@@ -174,7 +188,7 @@ async def websocket_logs(websocket: WebSocket):
                 websocket,
                 _build_log_entry(
                     message=(
-                        "Agent idle: set LOG_TAIL_PATH to a log file and/or "
+                        "Agent idle: set LOG_TAIL_PATH or LOG_TAIL_PATHS and/or "
                         "AGENT_MOCK_INTERVAL_SEC>0 (see agent/.env.example)."
                     ),
                     severity="warning",

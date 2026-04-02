@@ -19,7 +19,7 @@ This repo is a **structured prototype**, not a finished SOC product.
 
 | Piece | Role |
 |--------|------|
-| **WPF app** (`src/SentinelStream.App`) | Login → War Room UI; connects to the log agent when configured. |
+| **WPF app** (`src/SentinelStream.App`) | Login → War Room UI; optional **log substring filter** (full buffer kept for export); connects to the agent when configured. |
 | **LogStreamClient** (`SentinelStream.Services`) | `ClientWebSocket` → JSON or plain text lines → `LogEntry`. |
 | **AgoraWarRoomClient** (`SentinelStream.Core`) | **Simulation** of channel join/leave/chat (no Agora NuGet wired yet). |
 | **Python agent** (`agent/log_exporter.py`) | FastAPI + WebSocket `/ws/logs`; behavior from **environment variables** only. |
@@ -48,7 +48,8 @@ Copy `agent/.env.example` to `agent/.env`. All sources are optional; combine as 
 
 | Variable | Meaning |
 |----------|---------|
-| `LOG_TAIL_PATH` | Path to a UTF-8 text file to **follow** (like `tail -f`). |
+| `LOG_TAIL_PATH` | One UTF-8 text file to **follow** (like `tail -f`). Ignored when `LOG_TAIL_PATHS` is set. |
+| `LOG_TAIL_PATHS` | Comma-separated list of files to tail (max 32); overrides `LOG_TAIL_PATH` when non-empty. |
 | `AGENT_MOCK_INTERVAL_SEC` | Seconds between **synthetic** JSON log events (`0` = off). |
 | `AGENT_MOCK_MESSAGE` | Mock template; `{iso}` → UTC timestamp. |
 | `AGENT_MOCK_SOURCE` | `source` field for mock lines. |
