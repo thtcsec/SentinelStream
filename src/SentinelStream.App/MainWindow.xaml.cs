@@ -8,11 +8,18 @@ namespace SentinelStream.App;
 public partial class MainWindow : Window
 {
     private const string DefaultAppId = "sentinel_stream_demo";
+    private WarRoomViewModel? _currentWarRoomVm;
 
     public MainWindow()
     {
         InitializeComponent();
         ShowLogin();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _currentWarRoomVm?.Dispose();
+        base.OnClosed(e);
     }
 
     private void ShowLogin()
@@ -39,11 +46,15 @@ public partial class MainWindow : Window
                     config.ToFeedOptions(),
                     config.ToSessionArtifactOptions());
 
+                _currentWarRoomVm = warRoomVm;
+
                 warRoomVm.LeaveRequested += (_, _) =>
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        warRoomVm.Dispose();
+                        var vm = _currentWarRoomVm;
+                        _currentWarRoomVm = null;
+                        vm?.Dispose();
                         ShowLogin();
                     });
                 };

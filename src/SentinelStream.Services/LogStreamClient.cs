@@ -125,13 +125,20 @@ public class LogStreamClient : IDisposable
     /// </summary>
     public async Task DisconnectAsync()
     {
-        if (_webSocket?.State == WebSocketState.Open)
+        if (_webSocket?.State == WebSocketState.Open || _webSocket?.State == WebSocketState.CloseReceived || _webSocket?.State == WebSocketState.CloseSent)
         {
-            _cts?.Cancel();
-            await _webSocket.CloseAsync(
-                WebSocketCloseStatus.NormalClosure, "Client disconnecting", CancellationToken.None);
+            try
+            {
+                await _webSocket.CloseAsync(
+                    WebSocketCloseStatus.NormalClosure, "Client disconnecting", CancellationToken.None);
+            }
+            catch
+            {
+                // Ignore errors during close
+            }
         }
 
+        _cts?.Cancel();
         ConnectionStatusChanged?.Invoke(this, "Disconnected from log server.");
     }
 

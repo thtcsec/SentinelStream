@@ -21,19 +21,19 @@ public static class ForensicHasher
         if (!File.Exists(filePath))
             throw new FileNotFoundException("Evidence file not found.", filePath);
 
-        using var sha256 = SHA256.Create();
-        using var stream = new MemoryStream();
-
-        // Prepend salt
         var saltBytes = Encoding.UTF8.GetBytes(salt);
-        await stream.WriteAsync(saltBytes);
+        using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        incrementalHash.AppendData(saltBytes);
 
-        // Append file content
+        var buffer = new byte[81920]; // 80 KB
         using var fileStream = File.OpenRead(filePath);
-        await fileStream.CopyToAsync(stream);
+        int bytesRead;
+        while ((bytesRead = await fileStream.ReadAsync(buffer)) > 0)
+        {
+            incrementalHash.AppendData(buffer, 0, bytesRead);
+        }
 
-        stream.Position = 0;
-        var hash = await sha256.ComputeHashAsync(stream);
+        var hash = incrementalHash.GetHashAndReset();
         return Convert.ToHexStringLower(hash);
     }
 

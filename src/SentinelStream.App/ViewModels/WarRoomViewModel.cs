@@ -151,7 +151,14 @@ public class WarRoomViewModel : ViewModelBase, IDisposable
 
     private void StartLogAgentClient(Uri uri)
     {
-        _logStreamClient?.Dispose();
+        if (_logStreamClient != null)
+        {
+            _logStreamClient.LogReceived -= OnAgentLogReceived;
+            _logStreamClient.ConnectionStatusChanged -= OnAgentConnectionStatusChanged;
+            _logStreamClient.ErrorOccurred -= OnAgentError;
+            _logStreamClient.Dispose();
+        }
+
         _logStreamClient = new LogStreamClient();
         _logStreamClient.LogReceived += OnAgentLogReceived;
         _logStreamClient.ConnectionStatusChanged += OnAgentConnectionStatusChanged;
